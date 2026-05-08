@@ -1,4 +1,4 @@
-## Resource Deployment Scope
+﻿## Resource Deployment Scope
 
 By default, the workflows create the deployment stack at **resource group** level, targeting the resource group specified in `workload-orchestration.yaml`. All resources from the Bicep template (specified by `templateFile`) — including any imported modules — are deployed into this single resource group. The workflows use the [`azure/bicep-deploy@v2`](https://github.com/azure/bicep-deploy) action with `type: deploymentStack`.
 
