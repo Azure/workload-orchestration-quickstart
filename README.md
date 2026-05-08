@@ -67,7 +67,7 @@ Store the following as **GitHub repository secrets:**
 
 #### Required Azure RBAC Roles
 
-Assign one of the following roles to the managed identity. See [Deployment stacks](https://review.learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deployment-stacks) for more details.
+Assign one of the following roles to the managed identity. See [Deployment stacks](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deployment-stacks) for more details.
 
 | Role | When to use |
 |---|---|
