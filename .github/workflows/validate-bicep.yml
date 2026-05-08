@@ -1,0 +1,80 @@
+name: WO Validate
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate:
+    name: Validate Bicep
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read config
+        id: config
+        run: |
+          config_file="workload-orchestration.yaml"
+          if [ ! -f "$config_file" ]; then
+            echo "::error::No workload-orchestration.yaml found in repository root"
+            exit 1
+          fi
+
+          echo "rg=$(yq -r '.resourceGroup' "$config_file")" >> "$GITHUB_OUTPUT"
+          echo "template_file=$(yq -r '.templateFile // "./workload-orchestration/main.bicep"' "$config_file")" >> "$GITHUB_OUTPUT"
+          echo "deny_mode=$(yq -r '.denySettingsMode // "none"' "$config_file")" >> "$GITHUB_OUTPUT"
+          echo "deny_excluded_actions=$(yq -r '(.denySettingsExcludedActions // []) | join(",")' "$config_file")" >> "$GITHUB_OUTPUT"
+          echo "unmanage_resources=$(yq -r '.actionOnUnmanageResources // "detach"' "$config_file")" >> "$GITHUB_OUTPUT"
+          echo "unmanage_rgs=$(yq -r '.actionOnUnmanageResourceGroups // "detach"' "$config_file")" >> "$GITHUB_OUTPUT"
+
+          echo "Config loaded:"
+          cat "$config_file"
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate Bicep templates
+        id: validate
+        uses: azure/bicep-deploy@v2
+        with:
+          type: deploymentStack
+          operation: validate
+          name: workload-orchestration-stack
+          scope: resourceGroup
+          resource-group-name: ${{ steps.config.outputs.rg }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          template-file: ${{ steps.config.outputs.template_file }}
+          action-on-unmanage-resources: ${{ steps.config.outputs.unmanage_resources }}
+          action-on-unmanage-resourcegroups: ${{ steps.config.outputs.unmanage_rgs }}
+          deny-settings-mode: ${{ steps.config.outputs.deny_mode }}
+          deny-settings-excluded-actions: ${{ steps.config.outputs.deny_excluded_actions }}
+
+      - name: Comment validation result on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ steps.validate.outcome }}';
+            const icon = status === 'success' ? '\u2705' : '\u274C';
+            const body = `${icon} **Bicep Validation: ${status}**\n\n` +
+              `- **Template:** \`${{ steps.config.outputs.template_file }}\`\n` +
+              `- **Stack:** \`workload-orchestration-stack\`\n` +
+              `- **Resource Group:** \`${{ steps.config.outputs.rg }}\`\n\n` +
+              `> See [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });

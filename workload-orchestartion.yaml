@@ -1,0 +1,8 @@
+resourceGroup: "<your-resource-group>"
+templateFile: "./workload-orchestration/main.bicep"
+denySettingsMode: none
+denySettingsExcludedActions:
+  - Microsoft.Edge/configTemplates/linkToHierarchies/action
+  - Microsoft.Edge/configTemplates/unLinkFromHierarchies/action
+actionOnUnmanageResources: detach
+actionOnUnmanageResourceGroups: detach
