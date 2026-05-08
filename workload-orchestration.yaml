@@ -1,4 +1,4 @@
-resourceGroup: "<your-resource-group>"
+resourceGroup: "Git-WO-Demo"
 templateFile: "./workload-orchestration/main.bicep"
 denySettingsMode: none
 denySettingsExcludedActions:
