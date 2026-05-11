@@ -1,6 +1,6 @@
 # Workload Orchestration — Git-as-Source Jump Start
 
-Manage Workload Orchestration resources as **Bicep templates in Git** with automated validation, deployment via Azure Deployment Stacks, and customizable resource protection settings.
+Manage Workload Orchestration resources as **Bicep templates in Git** with automated validation, sync via Azure Deployment Stacks, customizable resource protection settings, and solution deployment powered by the [`Azure/workload-orchestration-actions`](https://github.com/Azure/workload-orchestration-actions) GitHub Action.
 
 ## Contents
 
@@ -10,6 +10,7 @@ Manage Workload Orchestration resources as **Bicep templates in Git** with autom
 - [Getting Started](#getting-started)
 - [Customize Resource Management](#customize-resource-management)
 - [Included Modules](#included-modules)
+- [Deploy by Name (Manual Step)](#deploy-by-name-manual-step)
 - [Samples](#samples)
 - [Resource Deployment Scope](#resource-deployment-scope)
 
@@ -29,6 +30,7 @@ docs/
 .github/workflows/
   validate-bicep.yml           # PR gate: validate
   sync-bicep.yml               # Sync on merge to main (Deployment Stacks)
+  deploy-by-name.yml           # ⚠️ Manual trigger required: deploy a solution to a target
 ```
 
 `workload-orchestration.yaml` is the central configuration file for the deployment. It specifies the target resource group, the Bicep template to deploy, deny settings, and resource lifecycle behavior. Here is the default configuration:
@@ -50,6 +52,8 @@ The repo ships with a sample `main.bicep` as a starting point for declaring your
 
 The `modules/` folder includes optional reusable Bicep modules that simplify defining Workload Orchestration resources. See [Included Modules](#included-modules) for details.
 
+The `deploy-by-name.yml` workflow uses the [`Azure/workload-orchestration-actions/deploy`](https://github.com/Azure/workload-orchestration-actions) GitHub Action to deploy a solution template to a target. See [Deploy by Name (Manual Step)](#deploy-by-name-manual-step) for details.
+
 ## How It Works
 
 1. **Edit** your Bicep templates in a feature branch — add, update, or remove resource declarations.
@@ -57,6 +61,10 @@ The `modules/` folder includes optional reusable Bicep modules that simplify def
    - Validates the Bicep templates against Azure.
    - Posts a validation result comment on the PR.
 3. **Merge** to `main` — the sync workflow syncs resources to Azure via Deployment Stacks with deny settings.
+4. **Deploy** — manually trigger the `deploy-by-name` workflow from the GitHub Actions UI to deploy your solution to a target cluster.
+
+> [!IMPORTANT]
+> Merging to `main` only syncs resource definitions to Azure. To **deploy your application to a cluster**, you must manually trigger the **Deploy by Name** workflow from the GitHub Actions UI. See [Deploy by Name (Manual Step)](#deploy-by-name-manual-step) for details.
 
 ## Prerequisites
 
@@ -90,6 +98,10 @@ The following roles are required for **managing the deployment stack**. Assign o
 4. **Author your resources** — define schemas, solution templates, config templates, and their versions in your Bicep templates. Set the `templateFile` field in `workload-orchestration.yaml` to point to your top-level template.
 5. Push a branch, open a PR, and the validation workflow runs automatically.
 6. Merge the PR to `main` — the sync workflow triggers and syncs your resources to Azure.
+7. **Deploy to your cluster** — go to **Actions → Deploy by Name**, trigger the workflow, and provide the target name and solution template version. See [Deploy by Name (Manual Step)](#deploy-by-name-manual-step).
+
+> [!IMPORTANT]
+> The sync workflow only pushes resource definitions to Azure — it does **not** deploy your application to a cluster. You must manually trigger the **Deploy by Name** workflow to deploy a solution template to a target.
 
 ## Customize Resource Management
 
@@ -226,6 +238,23 @@ resource target 'Microsoft.Edge/targets@2026-03-01' = {
 ```
 
 You can add more helper functions to these modules or create new modules as your project grows.
+
+## Deploy by Name (Manual Step)
+
+> [!IMPORTANT]
+> This workflow is **not triggered automatically**. You must manually run it from the GitHub Actions UI to deploy your solution to a target cluster.
+
+The `deploy-by-name.yml` workflow lets you manually deploy a solution template to a target by name, without needing to look up resource IDs. It is a **workflow_dispatch** workflow you trigger from the GitHub Actions UI.
+
+**Inputs:**
+- **Target Name** — the name of the target resource (e.g., `ContosoTarget`)
+- **Solution Template** — the solution template name and version in `{name}/{version}` format (e.g., `QualityApp/1.0.0`)
+
+**How it works:**
+1. **Resolve** — reads `workload-orchestration.yaml` to find the resource group, queries the deployment stack for the target and solution template version resource IDs by name.
+2. **Deploy** — uses the [`Azure/workload-orchestration-actions/deploy`](https://github.com/Azure/workload-orchestration-actions) action to deploy the resolved solution template version to the resolved target.
+
+The `Azure/workload-orchestration-actions/deploy` action handles the orchestration of deploying a solution template version to a target, including creating the necessary deployment resources in Azure.
 
 ## Samples
 
