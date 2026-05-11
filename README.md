@@ -1,6 +1,6 @@
 # Workload Orchestration — Git-as-Source Jump Start
 
-Manage Workload Orchestration resources (schemas, solution templates, config templates) as **Bicep templates in Git** with automated validation, deployment via Azure Deployment Stacks, and customizable resource protection settings.
+Manage Workload Orchestration resources as **Bicep templates in Git** with automated validation, deployment via Azure Deployment Stacks, and customizable resource protection settings.
 
 ## Contents
 
@@ -10,6 +10,7 @@ Manage Workload Orchestration resources (schemas, solution templates, config tem
 - [Getting Started](#getting-started)
 - [Customize Resource Management](#customize-resource-management)
 - [Included Modules](#included-modules)
+- [Samples](#samples)
 - [Resource Deployment Scope](#resource-deployment-scope)
 
 ## Repository Structure
@@ -20,6 +21,11 @@ workload-orchestration/
   main.bicep
   modules/
     solutionTemplate.bicep     # Reusable module with helper functions for solution template resources
+    target.bicep               # Reusable module with helper functions for target resources
+samples/
+  quickstart-basic/            # Quickstart: Basic solution setup
+docs/
+  deployment-stacks-scope.md   # Guide for changing deployment scope
 .github/workflows/
   validate-bicep.yml           # PR gate: validate
   sync-bicep.yml               # Sync on merge to main (Deployment Stacks)
@@ -40,7 +46,7 @@ actionOnUnmanageResourceGroups: detach
 
 See [Customize Resource Management](#customize-resource-management) for a full breakdown of each field.
 
-The repo ships with a sample `main.bicep` as a starting point for declaring your Workload Orchestration resources (schemas, solution templates, config templates, and their versions). You can rename it, restructure it, or replace it entirely — just update the `templateFile` field in `workload-orchestration.yaml` to point to whichever Bicep template you want to use as the deployment entry point. All resources defined in that template — including any referenced modules — are deployed together.
+The repo ships with a sample `main.bicep` as a starting point for declaring your Workload Orchestration resources. You can rename it, restructure it, or replace it entirely — just update the `templateFile` field in `workload-orchestration.yaml` to point to whichever Bicep template you want to use as the deployment entry point. All resources defined in that template — including any referenced modules — are deployed together.
 
 The `modules/` folder includes optional reusable Bicep modules that simplify defining Workload Orchestration resources. See [Included Modules](#included-modules) for details.
 
@@ -67,12 +73,14 @@ Store the following as **GitHub repository secrets:**
 
 #### Required Azure RBAC Roles
 
-Assign one of the following roles to the managed identity. See [Deployment stacks](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deployment-stacks) for more details.
+The following roles are required for **managing the deployment stack**. Assign one of these to the managed identity. See [Deployment stacks](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deployment-stacks) for more details.
 
 | Role | When to use |
 |---|---|
 | **Azure Deployment Stack Owner** | **Required** when `--deny-settings-mode` is `denyWriteAndDelete` or `denyDelete`. Can manage deployment stacks **including** creating and deleting deny assignments. |
 | **Azure Deployment Stack Contributor** | Use when `--deny-settings-mode` is `none` (the default in this repo). Can manage deployment stacks but **cannot** create or delete deny assignments. |
+
+> **Note:** In addition to the deployment stack role, the managed identity also needs sufficient permissions to **create and manage the Workload Orchestration resources** (e.g., sites, contexts, targets, schemas, solution templates) being deployed by the stack. Ensure the identity has the appropriate role (such as Contributor) on the target resource group.
 
 ## Getting Started
 
@@ -196,7 +204,36 @@ resource solutionTemplateVersion 'Microsoft.Edge/solutionTemplates/versions@2026
 }
 ```
 
-You can add more helper functions to this module or create new modules for schemas and config templates as your project grows.
+### `target.bicep`
+
+Exports a `HelmTarget` function that builds the target specification for a Helm-based deployment target. Returns the correctly shaped topology and binding configuration.
+
+**Usage:**
+```bicep
+import { HelmTarget } from 'modules/target.bicep'
+
+resource target 'Microsoft.Edge/targets@2026-03-01' = {
+  name: 'my-target'
+  location: location
+  extendedLocation: {
+    name: '<CUSTOM_LOCATION_ID>'
+    type: 'CustomLocation'
+  }
+  properties: {
+    targetSpecification: HelmTarget()
+  }
+}
+```
+
+You can add more helper functions to these modules or create new modules as your project grows.
+
+## Samples
+
+The [`samples/`](./samples/) folder contains ready-to-use Bicep templates for common Workload Orchestration scenarios. Each sample is a self-contained set of files you can copy into `workload-orchestration/` and deploy with minimal changes.
+
+| Sample | Description |
+|---|---|
+| [quickstart-basic](./samples/quickstart-basic/) | Sets up a complete Workload Orchestration environment — site, context, site reference, target, schema, and solution template — with proper dependencies. |
 
 ## Resource Deployment Scope
 

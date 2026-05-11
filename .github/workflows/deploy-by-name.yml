@@ -1,0 +1,82 @@
+name: WO Deploy (by Name)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target-name:
+        description: 'Target Name (e.g. ContosoTarget)'
+        required: true
+        type: string
+      solution-template:
+        description: 'Solution Template Name and Version (e.g. SampleApp/1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  resolve:
+    name: Resolve
+    runs-on: ubuntu-latest
+    outputs:
+      target-id: ${{ steps.resolve.outputs.target-id }}
+      solution-template-version-id: ${{ steps.resolve.outputs.solution-template-version-id }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve
+        id: resolve
+        shell: bash
+        run: |
+          config_file="workload-orchestration.yaml"
+          if [ ! -f "$config_file" ]; then
+            echo "::error::No workload-orchestration.yaml found in repository root"
+            exit 1
+          fi
+
+          resource_group=$(yq -r '.resourceGroup' "$config_file")
+
+          resources=$(az stack group show --name "workload-orchestration-stack" --resource-group "$resource_group" --query "resources" --output json)
+
+          targetId=$(echo "$resources" | jq -r --arg path "/providers/microsoft.edge/targets/${{ inputs.target-name }}" '[.[] | select(.id | ascii_downcase | endswith($path | ascii_downcase))][0].id // empty')
+          if [ -z "$targetId" ]; then
+            echo "::error::Target '${{ inputs.target-name }}' not found in stack resources"
+            exit 1
+          fi
+          echo "Target: $targetId"
+          echo "target-id=$targetId" >> "$GITHUB_OUTPUT"
+
+          IFS='/' read -r templateName templateVersion <<< '${{ inputs.solution-template }}'
+          if [ -z "$templateName" ] || [ -z "$templateVersion" ]; then
+            echo "::error::Invalid format '${{ inputs.solution-template }}'. Expected '{name}/{version}'"
+            exit 1
+          fi
+
+          versionId=$(echo "$resources" | jq -r --arg path "/providers/microsoft.edge/solutiontemplates/$templateName/versions/$templateVersion" '[.[] | select(.id | ascii_downcase | endswith($path | ascii_downcase))][0].id // empty')
+          if [ -z "$versionId" ]; then
+            echo "::error::Solution template '$templateName' version '$templateVersion' not found in stack resources"
+            exit 1
+          fi
+          echo "Solution Template Version: $versionId"
+          echo "solution-template-version-id=$versionId" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: "Deploy [${{ inputs.target-name }}]"
+    needs: resolve
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Target
+        uses: Azure/workload-orchestration-actions/deploy@main
+        with:
+          solution-template-version-id: ${{ needs.resolve.outputs.solution-template-version-id }}
+          target-id: ${{ needs.resolve.outputs.target-id }}

@@ -1,0 +1,16 @@
+@export()
+func HelmTarget() object => {
+  topologies: [
+    {
+      bindings: [
+        {
+          role: 'helm.v3'
+          provider: 'providers.target.helm'
+          config: {
+            inCluster: 'true'
+          }
+        }
+      ]
+    }
+  ]
+}
