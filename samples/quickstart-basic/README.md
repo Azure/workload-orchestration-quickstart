@@ -32,10 +32,10 @@ Fork this repo into your own GitHub account or organization.
 
 ### 3. Author your resources
 
-1. Copy the sample files into `workload-orchestration/`:
+1. Update `templateFile` in `workload-orchestration.yaml` to point to the sample:
 
-   ```bash
-   cp -r samples/quickstart-basic/* workload-orchestration/
+   ```yaml
+   templateFile: "./samples/quickstart-basic/main.bicep"
    ```
 
 2. Replace `<CUSTOM_LOCATION_ID>` in `target.bicep` with your Custom Location ARM resource ID.
