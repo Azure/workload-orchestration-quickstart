@@ -1,4 +1,4 @@
-import { HelmChart } from 'modules/solutionTemplate.bicep'
+import { HelmChart } from '../../workload-orchestration/modules/solutionTemplate.bicep'
 
 param location string
 

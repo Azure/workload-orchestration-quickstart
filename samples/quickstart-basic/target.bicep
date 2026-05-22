@@ -1,4 +1,4 @@
-import { HelmTarget } from 'modules/target.bicep'
+import { HelmTarget } from '../../workload-orchestration/modules/target.bicep'
 
 param location string
 param contextId string
