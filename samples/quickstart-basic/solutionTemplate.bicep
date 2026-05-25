@@ -46,6 +46,7 @@ resource solutionTemplateVersion 'Microsoft.Edge/solutionTemplates/versions@2026
       configs:
         AppName: QualityApp
         ErrorThreshold: 0.5
+        fullnameOverride: qualityapp
     '''
     specification: HelmChart('oci://ghcr.io/stefanprodan/charts/podinfo', '6.9.3') 
   }
