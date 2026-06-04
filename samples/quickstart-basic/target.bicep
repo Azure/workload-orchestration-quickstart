@@ -1,13 +1,14 @@
 import { HelmTarget } from '../../workload-orchestration/modules/target.bicep'
 
 param location string
+param customLocationId string
 param contextId string
 
 resource target 'Microsoft.Edge/targets@2026-03-01' = {
   name: 'ContosoTarget'
   location: location
   extendedLocation: {
-    name: '<CUSTOM_LOCATION_ID>' // ARM resource ID of your Custom Location associated with your Arc-connected cluster
+    name: customLocationId // ARM resource ID of your Custom Location associated with your Arc-connected cluster
     type: 'CustomLocation'
   }
   properties: {

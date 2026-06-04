@@ -1,0 +1,6 @@
+apiVersion: v2
+appVersion: 6.9.3
+description: A simple public Helm chart that deploys the provided image
+name: simple-chart
+type: application
+version: 1.0.0

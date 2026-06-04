@@ -1,0 +1,111 @@
+trigger: none
+
+pr:
+  branches:
+    include:
+      - main
+
+# Define 'azureServiceConnection' in Azure DevOps Pipeline variables or a linked variable group.
+# This service connection needs permissions to validate deployment stacks in the target resource group.
+
+pool:
+  vmImage: ubuntu-latest
+
+jobs:
+  - job: Validate
+    displayName: Validate Bicep
+    steps:
+      - checkout: self
+
+      - task: Bash@3
+        name: config
+        displayName: Read config
+        inputs:
+          targetType: inline
+          script: |
+            config_file="workload-orchestration.yaml"
+            if [ ! -f "$config_file" ]; then
+              echo "##vso[task.logissue type=error]No $config_file found in repository root"
+              exit 1
+            fi
+
+            echo "##vso[task.setvariable variable=rg;isOutput=true]$(yq -r '.resourceGroup' "$config_file")"
+            echo "##vso[task.setvariable variable=templateFile;isOutput=true]$(yq -r '.templateFile // "./workload-orchestration/main.bicep"' "$config_file")"
+            echo "##vso[task.setvariable variable=denyMode;isOutput=true]$(yq -r '.denySettingsMode // "none"' "$config_file")"
+            echo "##vso[task.setvariable variable=denyExcludedActions;isOutput=true]$(yq -r '(.denySettingsExcludedActions // []) | join(" ")' "$config_file")"
+            echo "##vso[task.setvariable variable=unmanageResources;isOutput=true]$(yq -r '.actionOnUnmanageResources // "detach"' "$config_file")"
+            echo "##vso[task.setvariable variable=unmanageRgs;isOutput=true]$(yq -r '.actionOnUnmanageResourceGroups // "detach"' "$config_file")"
+
+            echo "Config loaded:"
+            cat "$config_file"
+
+      - task: AzureCLI@2
+        name: validate
+        displayName: Validate Bicep templates
+        inputs:
+          azureSubscription: $(azureServiceConnection)
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            EXTRA_ARGS=()
+            if [ -n "$(config.denyExcludedActions)" ]; then
+              EXTRA_ARGS+=(--deny-settings-excluded-actions "$(config.denyExcludedActions)")
+            fi
+
+            # Map resource/rg unmanage settings to CLI value
+            res="$(config.unmanageResources)"
+            rgs="$(config.unmanageRgs)"
+            if [ "$res" = "delete" ] && [ "$rgs" = "delete" ]; then
+              ACTION_ON_UNMANAGE="deleteAll"
+            elif [ "$res" = "delete" ]; then
+              ACTION_ON_UNMANAGE="deleteResources"
+            else
+              ACTION_ON_UNMANAGE="detachAll"
+            fi
+
+            az stack group validate \
+              --name workload-orchestration-stack \
+              --resource-group "$(config.rg)" \
+              --template-file "$(config.templateFile)" \
+              --action-on-unmanage "$ACTION_ON_UNMANAGE" \
+              --deny-settings-mode "$(config.denyMode)" \
+              "${EXTRA_ARGS[@]}"
+
+      - task: Bash@3
+        displayName: Comment validation result on PR
+        condition: and(always(), eq(variables['Build.Reason'], 'PullRequest'))
+        env:
+          SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+          VALIDATE_RESULT: $(Agent.JobStatus)
+        inputs:
+          targetType: inline
+          script: |
+            if [ "$VALIDATE_RESULT" = "Succeeded" ]; then
+              ICON="✅"
+            else
+              ICON="❌"
+            fi
+
+            PR_ID=$(echo "$(System.PullRequest.PullRequestId)")
+            REPO_ID=$(echo "$(Build.Repository.ID)")
+            ORG_URL=$(echo "$(System.CollectionUri)")
+            PROJECT=$(echo "$(System.TeamProject)")
+
+            BODY=$(cat <<EOF
+            ${ICON} **Bicep Validation: ${VALIDATE_RESULT}**
+
+            - **Template:** \`$(config.templateFile)\`
+            - **Stack:** \`workload-orchestration-stack\`
+            - **Resource Group:** \`$(config.rg)\`
+
+            > See [pipeline run](${ORG_URL}${PROJECT}/_build/results?buildId=$(Build.BuildId)) for details.
+            EOF
+            )
+
+            COMMENT_JSON=$(jq -n --arg body "$BODY" '{"comments": [{"parentCommentId": 0, "content": $body, "commentType": 1}], "status": 1}')
+
+            curl -s -X POST \
+              "${ORG_URL}${PROJECT}/_apis/git/repositories/${REPO_ID}/pullRequests/${PR_ID}/threads?api-version=7.0" \
+              -H "Authorization: Bearer ${SYSTEM_ACCESSTOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$COMMENT_JSON"

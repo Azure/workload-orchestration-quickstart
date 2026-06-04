@@ -1,0 +1,15 @@
+image:
+  repository: ghcr.io/stefanprodan/podinfo
+  tag: "6.9.3"
+  pullPolicy: IfNotPresent
+  # Reference an existing dockerconfigjson Secret in another namespace.
+  # Helm will look it up at install/upgrade time and copy it into the
+  # release namespace, then mount it as an imagePullSecret on the Pod.
+  # Leave name/namespace empty to skip (public images need no secret).
+  pullSecrets:
+    name: ""             # e.g. my-registry-secret (empty = skip)
+    namespace: "default" # source namespace to copy the secret from
+
+replicaCount: 1
+
+containerPort: 9898

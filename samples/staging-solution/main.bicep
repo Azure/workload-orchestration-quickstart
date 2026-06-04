@@ -11,12 +11,13 @@ module environment 'environment.bicep' = {
 }
 
 // ─── 2. Target ───
-module target 'target.bicep' = {
-  name: 'Target'
+module targets 'target.bicep' = {
+  name: 'Targets'
   params: {
     location: location
-    customLocationId: '<CUSTOM_LOCATION_ID>'
     contextId: environment.outputs.contextId
+    devtargetcustomlocationId: '<DEV_TARGET_CUSTOM_LOCATION_ID>'
+    testtargetcustomlocationId: '<TEST_TARGET_CUSTOM_LOCATION_ID>'
   }
 }
 
@@ -25,11 +26,14 @@ module solutionTemplate 'solutionTemplate.bicep' = {
   name: 'SolutionTemplate'
   params: {
     location: location
+    acrResourceId: '<ACR_RESOURCE_ID>'
+    LocalConnectedRegistryIP: '<LOCAL_CONNECTED_REGISTRY_IP>'
   }
 }
 
 // ─── Outputs ───
 output contextId string = environment.outputs.contextId
-output targetId string = target.outputs.targetId
+output devTargetId string = targets.outputs.devtargetId
+output testTargetId string = targets.outputs.testtargetId
 output solutionTemplateId string = solutionTemplate.outputs.solutionTemplateId
 output solutionTemplateVersionId string = solutionTemplate.outputs.solutionTemplateVersionId
