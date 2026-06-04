@@ -1,0 +1,119 @@
+trigger: none
+pr: none
+
+# Define 'azureServiceConnection' in Azure DevOps Pipeline variables or a linked variable group.
+# This service connection needs permissions to create and deploy stack resources in the target resource group.
+
+parameters:
+  - name: targetName
+    displayName: 'Target Name (e.g. ContosoTarget)'
+    type: string
+  - name: solutionTemplate
+    displayName: 'Solution Template Name and Version (e.g. SampleApp/1.0.0)'
+    type: string
+
+pool:
+  vmImage: ubuntu-latest
+
+jobs:
+  - job: Resolve
+    displayName: Resolve
+    steps:
+      - checkout: self
+
+      - task: AzureCLI@2
+        name: resolve
+        displayName: Resolve target and solution template
+        inputs:
+          azureSubscription: $(azureServiceConnection)
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            config_file="workload-orchestration.yaml"
+            if [ ! -f "$config_file" ]; then
+              echo "##vso[task.logissue type=error]No workload-orchestration.yaml found in repository root"
+              exit 1
+            fi
+
+            resource_group=$(yq -r '.resourceGroup' "$config_file")
+
+            resources=$(az stack group show \
+              --name "workload-orchestration-stack" \
+              --resource-group "$resource_group" \
+              --query "resources" \
+              --output json)
+
+            targetId=$(echo "$resources" | jq -r \
+              --arg path "/providers/microsoft.edge/targets/${{ parameters.targetName }}" \
+              '[.[] | select(.id | ascii_downcase | endswith($path | ascii_downcase))][0].id // empty')
+            if [ -z "$targetId" ]; then
+              echo "##vso[task.logissue type=error]Target '${{ parameters.targetName }}' not found in stack resources"
+              exit 1
+            fi
+            echo "Target: $targetId"
+            echo "##vso[task.setvariable variable=targetId;isOutput=true]$targetId"
+
+            IFS='/' read -r templateName templateVersion <<< '${{ parameters.solutionTemplate }}'
+            if [ -z "$templateName" ] || [ -z "$templateVersion" ]; then
+              echo "##vso[task.logissue type=error]Invalid format '${{ parameters.solutionTemplate }}'. Expected '{name}/{version}'"
+              exit 1
+            fi
+
+            versionId=$(echo "$resources" | jq -r \
+              --arg path "/providers/microsoft.edge/solutiontemplates/$templateName/versions/$templateVersion" \
+              '[.[] | select(.id | ascii_downcase | endswith($path | ascii_downcase))][0].id // empty')
+            if [ -z "$versionId" ]; then
+              echo "##vso[task.logissue type=error]Solution template '$templateName' version '$templateVersion' not found in stack resources"
+              exit 1
+            fi
+            echo "Solution Template Version: $versionId"
+            echo "##vso[task.setvariable variable=solutionTemplateVersionId;isOutput=true]$versionId"
+
+  - job: Deploy
+    displayName: 'Deploy [${{ parameters.targetName }}]'
+    dependsOn: Resolve
+    variables:
+      targetId: $[ dependencies.Resolve.outputs['resolve.targetId'] ]
+      solutionTemplateVersionId: $[ dependencies.Resolve.outputs['resolve.solutionTemplateVersionId'] ]
+    steps:
+      - checkout: none
+
+      - task: AzureCLI@2
+        displayName: Deploy to Target
+        inputs:
+          azureSubscription: $(azureServiceConnection)
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            set -euo pipefail
+
+            az extension add -n workload-orchestration
+
+            solution_template_version_id="$(solutionTemplateVersionId)"
+            target_id="$(targetId)"
+
+            solution_regex='^/subscriptions/(.+)/resourceGroups/(.+)/providers/Microsoft.Edge/solutionTemplates/([^/]+)/versions/([^/]+)'
+            if [[ ! "$solution_template_version_id" =~ $solution_regex ]]; then
+              echo "##vso[task.logissue type=error]No Valid Solution Template Found"
+              exit 1
+            fi
+            solution="${BASH_REMATCH[3]}"
+            version="${BASH_REMATCH[4]}"
+
+            target_regex='^/subscriptions/(.+)/resourceGroups/(.+)/providers/Microsoft.Edge/targets/([^/]+)$'
+            if [[ ! "$target_id" =~ $target_regex ]]; then
+              echo "##vso[task.logissue type=error]No Valid Target Found"
+              exit 1
+            fi
+            resource_group="${BASH_REMATCH[2]}"
+            target="${BASH_REMATCH[3]}"
+
+            echo "Publishing $solution/$version to $target"
+            review=$(az workload-orchestration target review --resource-group "$resource_group" --target-name "$target" --solution-template-version-id "$solution_template_version_id")
+            review_id=$(echo "$review" | jq -r '.id')
+            az workload-orchestration target publish --resource-group "$resource_group" --target-name "$target" --solution-version-id "$review_id"
+            echo "Published $solution/$version to $target"
+
+            echo "Deploying $solution/$version to $target"
+            az workload-orchestration target install --resource-group "$resource_group" --target-name "$target" --solution-version-id "$review_id"
+            echo "Deployed $solution/$version to $target"

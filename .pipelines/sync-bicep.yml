@@ -1,0 +1,72 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr: none
+
+# Define 'azureServiceConnection' in Azure DevOps Pipeline variables or a linked variable group.
+# This service connection needs permissions to create deployment stacks in the target resource group.
+
+pool:
+  vmImage: ubuntu-latest
+
+jobs:
+  - job: Sync
+    displayName: Sync Resources
+    steps:
+      - checkout: self
+
+      - task: Bash@3
+        name: config
+        displayName: Read config
+        inputs:
+          targetType: inline
+          script: |
+            config_file="workload-orchestration.yaml"
+            if [ ! -f "$config_file" ]; then
+              echo "##vso[task.logissue type=error]No $config_file found in repository root"
+              exit 1
+            fi
+
+            echo "##vso[task.setvariable variable=rg;isOutput=true]$(yq -r '.resourceGroup' "$config_file")"
+            echo "##vso[task.setvariable variable=templateFile;isOutput=true]$(yq -r '.templateFile // "./workload-orchestration/main.bicep"' "$config_file")"
+            echo "##vso[task.setvariable variable=denyMode;isOutput=true]$(yq -r '.denySettingsMode // "none"' "$config_file")"
+            echo "##vso[task.setvariable variable=denyExcludedActions;isOutput=true]$(yq -r '(.denySettingsExcludedActions // []) | join(" ")' "$config_file")"
+            echo "##vso[task.setvariable variable=unmanageResources;isOutput=true]$(yq -r '.actionOnUnmanageResources // "detach"' "$config_file")"
+            echo "##vso[task.setvariable variable=unmanageRgs;isOutput=true]$(yq -r '.actionOnUnmanageResourceGroups // "detach"' "$config_file")"
+
+            echo "Config loaded:"
+            cat "$config_file"
+
+      - task: AzureCLI@2
+        displayName: Sync via Deployment Stack
+        inputs:
+          azureSubscription: $(azureServiceConnection)
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            EXTRA_ARGS=()
+            if [ -n "$(config.denyExcludedActions)" ]; then
+              EXTRA_ARGS+=(--deny-settings-excluded-actions "$(config.denyExcludedActions)")
+            fi
+
+            # Map resource/rg unmanage settings to CLI value
+            res="$(config.unmanageResources)"
+            rgs="$(config.unmanageRgs)"
+            if [ "$res" = "delete" ] && [ "$rgs" = "delete" ]; then
+              ACTION_ON_UNMANAGE="deleteAll"
+            elif [ "$res" = "delete" ]; then
+              ACTION_ON_UNMANAGE="deleteResources"
+            else
+              ACTION_ON_UNMANAGE="detachAll"
+            fi
+
+            az stack group create \
+              --name workload-orchestration-stack \
+              --resource-group "$(config.rg)" \
+              --template-file "$(config.templateFile)" \
+              --action-on-unmanage "$ACTION_ON_UNMANAGE" \
+              --deny-settings-mode "$(config.denyMode)" \
+              "${EXTRA_ARGS[@]}" \
+              --yes

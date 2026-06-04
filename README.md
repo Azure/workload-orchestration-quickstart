@@ -1,271 +1,44 @@
-# Workload Orchestration — Git-as-Source Jump Start
+# Workload Orchestration — Github & ADO Jump Start
 
-Manage Workload Orchestration resources as **Bicep templates in Git** with automated validation, sync via Azure Deployment Stacks, customizable resource protection settings, and solution deployment powered by the [`Azure/workload-orchestration-actions`](https://github.com/Azure/workload-orchestration-actions) GitHub Action.
+Manage Workload Orchestration resources as **Bicep templates in Github / ADO** with automated validation, sync via Azure Deployment Stacks, customizable resource protection settings, and solution deployment powered by canned pipelines for GitHub and Azure DevOps.
 
 ## Contents
 
-- [Repository Structure](#repository-structure)
-- [How It Works](#how-it-works)
-- [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
-- [Customize Resource Management](#customize-resource-management)
-- [Included Modules](#included-modules)
-- [Deploy by Name (Manual Step)](#deploy-by-name-manual-step)
+- [Repository Structure](#repository-structure)
 - [Samples](#samples)
-- [Resource Deployment Scope](#resource-deployment-scope)
-
-## Repository Structure
-
-```
-workload-orchestration.yaml   # Deployment stack settings (resource group, template path etc.)
-workload-orchestration/
-  main.bicep
-  modules/
-    solutionTemplate.bicep     # Reusable module with helper functions for solution template resources
-    target.bicep               # Reusable module with helper functions for target resources
-samples/
-  quickstart-basic/            # Quickstart: Basic solution setup
-docs/
-  deployment-stacks-scope.md   # Guide for changing deployment scope
-.github/workflows/
-  validate-bicep.yml           # PR gate: validate
-  sync-bicep.yml               # Sync on merge to main (Deployment Stacks)
-  deploy-by-name.yml           # ⚠️ Manual trigger required: deploy a solution to a target
-```
-
-`workload-orchestration.yaml` is the central configuration file for the deployment. It specifies the target resource group, the Bicep template to deploy, deny settings, and resource lifecycle behavior. Here is the default configuration:
-
-```yaml
-resourceGroup: "<your-resource-group>"
-templateFile: "./workload-orchestration/main.bicep"
-denySettingsMode: none
-denySettingsExcludedActions:
-  - Microsoft.Edge/configTemplates/linkToHierarchies/action
-  - Microsoft.Edge/configTemplates/unLinkFromHierarchies/action
-actionOnUnmanageResources: detach
-actionOnUnmanageResourceGroups: detach
-```
-
-See [Customize Resource Management](#customize-resource-management) for a full breakdown of each field.
-
-The repo ships with a sample `main.bicep` as a starting point for declaring your Workload Orchestration resources. You can rename it, restructure it, or replace it entirely — just update the `templateFile` field in `workload-orchestration.yaml` to point to whichever Bicep template you want to use as the deployment entry point. All resources defined in that template — including any referenced modules — are deployed together.
-
-The `modules/` folder includes optional reusable Bicep modules that simplify defining Workload Orchestration resources. See [Included Modules](#included-modules) for details.
-
-The `deploy-by-name.yml` workflow uses the [`Azure/workload-orchestration-actions/deploy`](https://github.com/Azure/workload-orchestration-actions) GitHub Action to deploy a solution template to a target. See [Deploy by Name (Manual Step)](#deploy-by-name-manual-step) for details.
-
-## How It Works
-
-1. **Edit** your Bicep templates in a feature branch — add, update, or remove resource declarations.
-2. **Open a PR** to `main` — the validate workflow runs automatically:
-   - Validates the Bicep templates against Azure.
-   - Posts a validation result comment on the PR.
-3. **Merge** to `main` — the sync workflow syncs resources to Azure via Deployment Stacks with deny settings.
-4. **Deploy** — manually trigger the `deploy-by-name` workflow from the GitHub Actions UI to deploy your solution to a target cluster.
-
-> [!IMPORTANT]
-> Merging to `main` only syncs resource definitions to Azure. To **deploy your application to a cluster**, you must manually trigger the **Deploy by Name** workflow from the GitHub Actions UI. See [Deploy by Name (Manual Step)](#deploy-by-name-manual-step) for details.
-
-## Prerequisites
-
-### Azure Authentication
-
-The workflows authenticate to Azure via **OpenID Connect (OIDC)** using a **user-assigned managed identity** with federated credentials. To set this up, follow the guide: [Connect GitHub Actions to Azure via OpenID Connect](https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure-openid-connect). You will need to create a managed identity, configure federated credentials for both the `main` branch and pull requests, and store the identity's `clientId`, `tenantId`, and `subscriptionId` as GitHub secrets.
-
-Store the following as **GitHub repository secrets:**
-- `AZURE_CLIENT_ID` — User-assigned managed identity client ID
-- `AZURE_TENANT_ID` — Azure AD tenant ID
-- `AZURE_SUBSCRIPTION_ID` — Target subscription ID
-
-> **Note:** OIDC with a user-assigned managed identity is the recommended approach, but other authentication methods are also supported (e.g., service principal with a secret or certificate). See [Use GitHub Actions to connect to Azure](https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure?tabs=identity) for all available options.
-
-#### Required Azure RBAC Roles
-
-The following roles are required for **managing the deployment stack**. Assign one of these to the managed identity. See [Deployment stacks](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/deployment-stacks) for more details.
-
-| Role | When to use |
-|---|---|
-| **Azure Deployment Stack Owner** | **Required** when `--deny-settings-mode` is `denyWriteAndDelete` or `denyDelete`. Can manage deployment stacks **including** creating and deleting deny assignments. |
-| **Azure Deployment Stack Contributor** | Use when `--deny-settings-mode` is `none` (the default in this repo). Can manage deployment stacks but **cannot** create or delete deny assignments. |
-
-> **Note:** In addition to the deployment stack role, the managed identity also needs sufficient permissions to **create and manage the Workload Orchestration resources** (e.g., sites, contexts, targets, schemas, solution templates) being deployed by the stack. Ensure the identity has the appropriate role (such as Contributor) on the target resource group.
+- [Bicep Modules](#bicep-modules)
 
 ## Getting Started
 
-1. **Fork** this repo into your own GitHub account or organization.
-2. **Set up Azure auth:** Follow the [Connect GitHub Actions to Azure via OpenID Connect](https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure-openid-connect) guide to configure OIDC authentication, then store `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` as repository secrets.
-3. **Configure deployment settings** in `workload-orchestration.yaml` — see [Repository Structure](#repository-structure) and [Customize Resource Management](#customize-resource-management) for details.
-4. **Author your resources** — define schemas, solution templates, config templates, and their versions in your Bicep templates. Set the `templateFile` field in `workload-orchestration.yaml` to point to your top-level template.
-5. Push a branch, open a PR, and the validation workflow runs automatically.
-6. Merge the PR to `main` — the sync workflow triggers and syncs your resources to Azure.
-7. **Deploy to your cluster** — go to **Actions → Deploy by Name**, trigger the workflow, and provide the target name and solution template version. See [Deploy by Name (Manual Step)](#deploy-by-name-manual-step).
+1. **Fork / Push** this repository into GitHub or Azure DevOps.
+2. **Set up pipelines and azure authentication:** Follow the [Pipelines Setup](docs/pipelines.md)
+3. **Configure deployment settings** in `workload-orchestration.yaml` - see [Repository Structure](#repository-structure) and [Customize Resource Management](docs/resource-management-customization.md) for details.
+4. **Author your resources** - define schemas, solution templates, config templates, and their versions in your Bicep templates. Set the `templateFile` field in `workload-orchestration.yaml` to point to your top-level template.
+5. **Push a branch, open a PR**, and the validation workflow runs automatically.
+6. **Merge the PR** to `main` - the sync workflow triggers and syncs your resources to Azure.
+7. **Deploy to your cluster** - go to **Deploy by Name**, trigger, and provide the target name and solution template version. See [Pipelines](docs/pipelines.md) for details about deploy.
 
-> [!IMPORTANT]
-> The sync workflow only pushes resource definitions to Azure — it does **not** deploy your application to a cluster. You must manually trigger the **Deploy by Name** workflow to deploy a solution template to a target.
+## Repository Structure
 
-## Customize Resource Management
-
-The deployment stack protects managed resources from out-of-band changes and controls their lifecycle. All settings are configured in `workload-orchestration.yaml`.
-
-```yaml
-resourceGroup: my-resource-group
-templateFile: "./workload-orchestration/main.bicep"
-denySettingsMode: none
-denySettingsExcludedActions:
-  - Microsoft.Edge/configTemplates/linkToHierarchies/action
-  - Microsoft.Edge/configTemplates/unLinkFromHierarchies/action
-actionOnUnmanageResources: detach
-actionOnUnmanageResourceGroups: detach
-```
-
----
-
-### `resourceGroup`
-
-The target Azure resource group for deployment. **Required.**
-
----
-
-### `templateFile`
-
-The path to the Bicep template file to deploy. **Default:** `./workload-orchestration/main.bicep`.
-
----
-
-### `denySettingsMode`
-
-Controls whether Azure blocks direct (out-of-band) changes to resources managed by the stack.
-
-| Value | Behavior |
-|---|---|
-| `denyWriteAndDelete` | Blocks both modifications and deletions of managed resources outside the stack. |
-| `denyDelete` | Blocks deletions but allows modifications. Useful if you want to allow operational changes (e.g., scaling) while preventing accidental deletes. |
-| `none` | **Default.** No restrictions. Resources can be freely modified or deleted outside the stack. |
-
----
-
-### `denySettingsExcludedActions`
-
-A list of Azure RBAC actions that are **exempt** from the deny assignment. These actions can be performed on managed resources even when deny settings are active.
-
-The default value includes actions required for config template hierarchy operations. Git-based hierarchy linking is not yet supported, so these actions must be allowlisted to allow linking and unlinking config templates to hierarchies from outside the deployment stack (e.g., via CLI or portal):
-```yaml
-# Default
-denySettingsExcludedActions:
-  - Microsoft.Edge/configTemplates/linkToHierarchies/action
-  - Microsoft.Edge/configTemplates/unLinkFromHierarchies/action
-```
-
-You can add more actions to the list as needed:
-
-| Action | Why you might exclude it |
-|---|---|
-| `Microsoft.Edge/configTemplates/linkToHierarchies/action` | **(required)** Git-based linking not yet supported; must be performed outside the stack |
-| `Microsoft.Edge/configTemplates/unLinkFromHierarchies/action` | **(required)** Git-based unlinking not yet supported; must be performed outside the stack |
-| `Microsoft.Resources/tags/write` | Allow tagging resources without going through the stack |
-| `Microsoft.Authorization/locks/write` | Allow adding resource locks directly |
-| `Microsoft.Insights/diagnosticSettings/write` | Allow configuring diagnostics outside the stack |
-
----
-
-### `actionOnUnmanageResources`
-
-Controls what happens to **resources** when they are removed from the Bicep template and the stack is redeployed.
-
-| Value | Behavior |
-|---|---|
-| `detach` | **Default.** Resources remain in Azure but are no longer tracked by the stack. |
-| `delete` | Resources are **deleted** from Azure. |
-
----
-
-### `actionOnUnmanageResourceGroups`
-
-Controls what happens to **resource groups** when they are removed from the template.
-
-| Value | Behavior |
-|---|---|
-| `detach` | **Default.** Resource groups remain in Azure but are no longer tracked. |
-| `delete` | Resource groups are **deleted** from Azure. |
-
-## Included Modules
-
-The `modules/` folder contains optional, reusable Bicep modules that provide helper functions for defining Workload Orchestration resources. You can use them, extend them, or remove them as needed.
-
-### `solutionTemplate.bicep`
-
-Exports a `HelmChart` function that builds the component structure for a Helm-based solution template. Pass in a chart repo URL and version, and it returns the correctly shaped specification object.
-
-**Usage:**
-```bicep
-import { HelmChart } from 'modules/solutionTemplate.bicep'
-
-resource solutionTemplateVersion 'Microsoft.Edge/solutionTemplates/versions@2026-03-01' = {
-  parent: solutionTemplate
-  name: '1.0.0'
-  properties: {
-    configurations: $$'''
-      schema:
-        name: $${schema.name}
-        version: $${schemaVersion.name}
-      configs:
-        ErrorThreshold: ${{$val(ErrorThreshold)}}
-    '''
-    specification: HelmChart('<repo url>', '<version>')
-  }
-}
-```
-
-### `target.bicep`
-
-Exports a `HelmTarget` function that builds the target specification for a Helm-based deployment target. Returns the correctly shaped topology and binding configuration.
-
-**Usage:**
-```bicep
-import { HelmTarget } from 'modules/target.bicep'
-
-resource target 'Microsoft.Edge/targets@2026-03-01' = {
-  name: 'my-target'
-  location: location
-  extendedLocation: {
-    name: '<CUSTOM_LOCATION_ID>'
-    type: 'CustomLocation'
-  }
-  properties: {
-    targetSpecification: HelmTarget()
-  }
-}
-```
-
-You can add more helper functions to these modules or create new modules as your project grows.
-
-## Deploy by Name (Manual Step)
-
-> [!IMPORTANT]
-> This workflow is **not triggered automatically**. You must manually run it from the GitHub Actions UI to deploy your solution to a target cluster.
-
-The `deploy-by-name.yml` workflow lets you manually deploy a solution template to a target by name, without needing to look up resource IDs. It is a **workflow_dispatch** workflow you trigger from the GitHub Actions UI.
-
-**Inputs:**
-- **Target Name** — the name of the target resource (e.g., `ContosoTarget`)
-- **Solution Template** — the solution template name and version in `{name}/{version}` format (e.g., `QualityApp/1.0.0`)
-
-**How it works:**
-1. **Resolve** — reads `workload-orchestration.yaml` to find the resource group, queries the deployment stack for the target and solution template version resource IDs by name.
-2. **Deploy** — uses the [`Azure/workload-orchestration-actions/deploy`](https://github.com/Azure/workload-orchestration-actions) action to deploy the resolved solution template version to the resolved target.
-
-The `Azure/workload-orchestration-actions/deploy` action handles the orchestration of deploying a solution template version to a target, including creating the necessary deployment resources in Azure.
+| Path                                | Purpose                                                                                                                                                                                                                |
+|-------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `workload-orchestration.yaml`       | Central config file specifying target resource group, Bicep template, deny settings, and resource lifecycle behavior. See [Customize Resource Management](docs/resource-management-customization.md) for more details. |
+| `workload-orchestration/main.bicep` | Entry point template. You can rename, restructure, or replace it - all resources in the referenced template and modules are deployed together.                                                                         |
+| `workload-orchestration/modules/`   | Optional reusable Bicep modules that simplify defining Workload Orchestration resources. See [Bicep Modules](#bicep-modules).                                                                                    |
+| `.github/workflows/`                | GitHub Action Workflows: validate, sync, manual deploy - See [Pipelines](docs/pipelines.md) for details and setup.                                                                                                     |
+| `.pipelines/`                       | Azure DevOps Pipelines: validate, sync, manual deploy - See [Pipelines](docs/pipelines.md) for details and setup.                                                                                                      |
+| `samples/`                          | [Ready-to-use sample templates](samples/README.md) - for example: basic, staging.                                                                                                                                      |
 
 ## Samples
 
-The [`samples/`](./samples/) folder contains ready-to-use Bicep templates for common Workload Orchestration scenarios. Each sample is a self-contained set of files you can copy into `workload-orchestration/` and deploy with minimal changes.
+The [`samples/`](./samples/) folder contains ready-to-use Bicep templates for common Workload Orchestration scenarios. Each sample is a self-contained set of files and deploy with minimal changes.
 
-| Sample | Description |
-|---|---|
-| [quickstart-basic](./samples/quickstart-basic/) | Sets up a complete Workload Orchestration environment — site, context, site reference, target, schema, and solution template — with proper dependencies. |
+| Sample                                          | Description                                                                                                                                              |
+|-------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| [quickstart-basic](./samples/quickstart-basic/) | Sets up Workload Orchestration to deploy solution on cluster. |
+| [staging-solution](./samples/staging-solution/) | Sets up Workload Orchestration with image staging.                                                                                                     |
 
-## Resource Deployment Scope
+## Bicep Modules
 
-By default, the workflows create the deployment stack at **resource group** level, targeting the resource group specified in `workload-orchestration.yaml`. All resources from the Bicep template (specified by `templateFile`) — including any imported modules — are deployed into this single resource group. The workflows use the [`azure/bicep-deploy@v2`](https://github.com/azure/bicep-deploy) action with `type: deploymentStack`.
-
-If you wish to change the scope to Subscriptions or Management Group, take a look at [Resource Deployment Scope](docs/deployment-stacks-scope.md).
+See [workload-orchestration/modules/README.md](workload-orchestration/modules/README.md) for details on the reusable Bicep modules included in this repository.
