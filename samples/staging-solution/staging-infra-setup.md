@@ -265,8 +265,6 @@ kubectl get pods -n connected-registry
 az acr connected-registry list --registry "$ACR_NAME" --output table
 ```
 
-> The IP you choose here is the `LocalConnectedRegistryIP` parameter required by `main.bicep`.
-
 ### 7. Make the image-pull credentials available to your workloads
 
 Workloads pull from the connected registry using the client token (`all-repos-pull-token`) provisioned by `infra.bicep`. You need to get that token's credentials onto the cluster as a Kubernetes secret in the **namespace bound to your Custom Location** — the Workload Orchestration extension's identity is scoped to that namespace and may not have access to others. Pick the approach that matches your chart:

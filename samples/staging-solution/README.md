@@ -21,7 +21,7 @@ configs:
   AppName: QualityApp
   fullnameOverride: qualityapp
   image:
-    repository: $${LocalConnectedRegistryIP}/$${imageName}   # e.g. 10.0.0.42/podinfo
+    repository: ${{$connectedRegistryIP()}}+/$${imageName}
     tag: $${imageTag}                                        # e.g. latest
     pullPolicy: Always
     pullSecrets:
@@ -83,9 +83,8 @@ The staging infrastructure setup produces all the values you need. Fill them int
 | `imageTag` | Tag of the image you pushed (default: `latest`) | [Step 4](./staging-infra-setup.md#4-push-your-container-image-to-the-acr) (`IMAGE_TAG`) |
 | `repository` | Full OCI URL of the Helm chart inside the ACR, in the form `oci://<acr-login-server>/<chart-repo>/<chart-name>` (default: `oci://contosoacr.azurecr.io/charts/simple-chart`) | [Step 5](./staging-infra-setup.md#5-package-and-push-the-helm-chart-to-the-acr) (`CHART_REPO` + chart name) |
 | `version` | Helm chart version you pushed (default: `1.0.0`) | [Step 5](./staging-infra-setup.md#5-package-and-push-the-helm-chart-to-the-acr) (`CHART_VERSION`) |
-| `LocalConnectedRegistryIP` | Cluster IP assigned to the connected registry service | [Step 6](./staging-infra-setup.md#6-install-the-connected-registry-extension-on-the-arc-cluster) (`AVAILABLE_IP`) |
 | `LocalConnectedRegistrySecretName` | Name of the image-pull secret on the cluster | [Step 7](./staging-infra-setup.md#7-make-the-image-pull-credentials-available-to-your-workloads) (`PULL_SECRET_NAME`, e.g. `my-acr-secret`) |
-| `namespace` | Custom Location namespace where the secret lives (default: `workloadorchestration`) | [Step 7](./staging-infra-setup.md#7-make-the-image-pull-credentials-available-to-your-workloads) (`CL_NAMESPACE`) |
+| `namespace` | Custom Location namespace where the secret lives (default: `workloadorchestrationresources`) | [Step 7](./staging-infra-setup.md#7-make-the-image-pull-credentials-available-to-your-workloads) (`CL_NAMESPACE`) |
 
 #### Override defaults with your own values
 
@@ -97,7 +96,6 @@ module solutionTemplate 'solutionTemplate.bicep' = {
   params: {
     location: location
     acrResourceId: '<ACR_RESOURCE_ID>'
-    LocalConnectedRegistryIP: '<LOCAL_CONNECTED_REGISTRY_IP>'
     // Overrides — only include the ones you want to change
     imageName: 'myapp'
     imageTag: 'v1.2.3'
