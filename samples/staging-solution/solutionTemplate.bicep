@@ -4,9 +4,8 @@ param location string
 param acrResourceId string
 param imageName string = 'podinfo'
 param imageTag string = 'latest'
-param LocalConnectedRegistryIP string
 param LocalConnectedRegistrySecretName string = 'my-acr-secret'
-param namespace string = 'workloadorchestration'
+param namespace string = 'workloadorchestrationresources'
 param repository string = 'oci://contosoacr.azurecr.io/charts/simple-chart'
 param version string = '1.0.0'
 
@@ -30,7 +29,7 @@ resource solutionTemplateVersion 'Microsoft.Edge/solutionTemplates/versions@2026
         fullnameOverride: qualityapp
         replicaCount: 2
         image:
-          repository: $${LocalConnectedRegistryIP}/$${imageName}
+          repository: ${{$connectedRegistryIP()}}+/$${imageName}
           tag: $${imageTag}
           pullPolicy: Always
           pullSecrets:

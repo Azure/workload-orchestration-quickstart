@@ -27,7 +27,6 @@ module solutionTemplate 'solutionTemplate.bicep' = {
   params: {
     location: location
     acrResourceId: '<ACR_RESOURCE_ID>'
-    LocalConnectedRegistryIP: '<LOCAL_CONNECTED_REGISTRY_IP>'
   }
 }
 
