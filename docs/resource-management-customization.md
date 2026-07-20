@@ -6,9 +6,7 @@ The deployment stack protects managed resources from out-of-band changes and con
 resourceGroup: my-resource-group
 templateFile: "./workload-orchestration/main.bicep"
 denySettingsMode: none
-denySettingsExcludedActions:
-  - Microsoft.Edge/configTemplates/linkToHierarchies/action
-  - Microsoft.Edge/configTemplates/unLinkFromHierarchies/action
+denySettingsExcludedActions: []
 actionOnUnmanageResources: detach
 actionOnUnmanageResourceGroups: detach
 ```
@@ -43,23 +41,25 @@ Controls whether Azure blocks direct (out-of-band) changes to resources managed 
 
 A list of Azure RBAC actions that are **exempt** from the deny assignment. These actions can be performed on managed resources even when deny settings are active.
 
-The default value includes actions required for config template hierarchy operations. Github / ADO-based hierarchy linking is not yet supported, so these actions must be allowlisted to allow linking and unlinking config templates to hierarchies from outside the deployment stack (e.g., via CLI or portal):
-```yaml
-# Default
-denySettingsExcludedActions:
-  - Microsoft.Edge/configTemplates/linkToHierarchies/action
-  - Microsoft.Edge/configTemplates/unLinkFromHierarchies/action
-```
+> **Note:** This only has an effect when `denySettingsMode` is `denyWriteAndDelete` or `denyDelete`. With the default `none`, no deny assignment is created, so this list is ignored.
 
 You can add more actions to the list as needed:
 
 | Action | Why you might exclude it |
 |---|---|
-| `Microsoft.Edge/configTemplates/linkToHierarchies/action` | **(required)** Github / ADO bicep-based linking not yet supported; must be performed outside the stack |
-| `Microsoft.Edge/configTemplates/unLinkFromHierarchies/action` | **(required)** Github / ADO bicep-based unlinking not yet supported; must be performed outside the stack |
 | `Microsoft.Resources/tags/write` | Allow tagging resources without going through the stack |
 | `Microsoft.Authorization/locks/write` | Allow adding resource locks directly |
 | `Microsoft.Insights/diagnosticSettings/write` | Allow configuring diagnostics outside the stack |
+
+For example, to protect resources while still allowing tags, locks, and diagnostic settings to be changed out-of-band:
+
+```yaml
+denySettingsMode: denyWriteAndDelete
+denySettingsExcludedActions:
+  - Microsoft.Resources/tags/write
+  - Microsoft.Authorization/locks/write
+  - Microsoft.Insights/diagnosticSettings/write
+```
 
 ---
 
