@@ -29,6 +29,12 @@ jobs:
 
           echo "rg=$(yq -r '.resourceGroup' "$config_file")" >> "$GITHUB_OUTPUT"
           echo "template_file=$(yq -r '.templateFile // "./workload-orchestration/main.bicep"' "$config_file")" >> "$GITHUB_OUTPUT"
+          parameters_file=$(yq -r '.parametersFile // ""' "$config_file")
+          if [ -n "$parameters_file" ] && [ ! -f "$parameters_file" ]; then
+            echo "::error::Parameter file not found: $parameters_file"
+            exit 1
+          fi
+          echo "parameters_file=$parameters_file" >> "$GITHUB_OUTPUT"
           echo "deny_mode=$(yq -r '.denySettingsMode // "none"' "$config_file")" >> "$GITHUB_OUTPUT"
           echo "deny_excluded_actions=$(yq -r '(.denySettingsExcludedActions // []) | join(",")' "$config_file")" >> "$GITHUB_OUTPUT"
           echo "unmanage_resources=$(yq -r '.actionOnUnmanageResources // "detach"' "$config_file")" >> "$GITHUB_OUTPUT"
@@ -54,6 +60,7 @@ jobs:
           resource-group-name: ${{ steps.config.outputs.rg }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           template-file: ${{ steps.config.outputs.template_file }}
+          parameters-file: ${{ steps.config.outputs.parameters_file }}
           action-on-unmanage-resources: ${{ steps.config.outputs.unmanage_resources }}
           action-on-unmanage-resourcegroups: ${{ steps.config.outputs.unmanage_rgs }}
           deny-settings-mode: ${{ steps.config.outputs.deny_mode }}

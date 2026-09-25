@@ -31,6 +31,12 @@ jobs:
 
             echo "##vso[task.setvariable variable=rg;isOutput=true]$(yq -r '.resourceGroup' "$config_file")"
             echo "##vso[task.setvariable variable=templateFile;isOutput=true]$(yq -r '.templateFile // "./workload-orchestration/main.bicep"' "$config_file")"
+            parameters_file=$(yq -r '.parametersFile // ""' "$config_file")
+            if [ -n "$parameters_file" ] && [ ! -f "$parameters_file" ]; then
+              echo "##vso[task.logissue type=error]Parameter file not found: $parameters_file"
+              exit 1
+            fi
+            echo "##vso[task.setvariable variable=parametersFile;isOutput=true]$parameters_file"
             echo "##vso[task.setvariable variable=denyMode;isOutput=true]$(yq -r '.denySettingsMode // "none"' "$config_file")"
             echo "##vso[task.setvariable variable=denyExcludedActions;isOutput=true]$(yq -r '(.denySettingsExcludedActions // []) | join(" ")' "$config_file")"
             echo "##vso[task.setvariable variable=unmanageResources;isOutput=true]$(yq -r '.actionOnUnmanageResources // "detach"' "$config_file")"
@@ -62,10 +68,15 @@ jobs:
               ACTION_ON_UNMANAGE="detachAll"
             fi
 
+            TEMPLATE_ARGS=(--template-file "$(config.templateFile)")
+            if [ -n "$(config.parametersFile)" ]; then
+              TEMPLATE_ARGS+=(--parameters "$(config.parametersFile)")
+            fi
+
             az stack group create \
               --name workload-orchestration-stack \
               --resource-group "$(config.rg)" \
-              --template-file "$(config.templateFile)" \
+              "${TEMPLATE_ARGS[@]}" \
               --action-on-unmanage "$ACTION_ON_UNMANAGE" \
               --deny-settings-mode "$(config.denyMode)" \
               "${EXTRA_ARGS[@]}" \
