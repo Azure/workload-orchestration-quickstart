@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Read config
         id: config
@@ -44,7 +44,7 @@ jobs:
           cat "$config_file"
 
       - name: Azure login
-        uses: azure/login@v2
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -52,7 +52,7 @@ jobs:
 
       - name: Validate Bicep templates
         id: validate
-        uses: azure/bicep-deploy@v2
+        uses: azure/bicep-deploy@c66bb161da87636b24a64aa8e0a427645d846c57 # v2.5.0
         with:
           type: deploymentStack
           operation: validate
@@ -69,7 +69,7 @@ jobs:
 
       - name: Comment validation result on PR
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             const status = '${{ steps.validate.outcome }}';
