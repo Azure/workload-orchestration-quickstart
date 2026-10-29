@@ -38,6 +38,7 @@ The [`samples/`](./samples/) folder contains ready-to-use Bicep templates for co
 |-------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
 | [quickstart-basic](./samples/quickstart-basic/) | Sets up Workload Orchestration to deploy solution on cluster. |
 | [staging-solution](./samples/staging-solution/) | Sets up Workload Orchestration with image staging.                                                                                                     |
+| [aio](./samples/aio/) | Sets up Azure IoT Operations on an Arc-connected Kubernetes cluster. |
 
 ## Bicep Modules
 
